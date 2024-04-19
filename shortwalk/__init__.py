@@ -1,7 +1,7 @@
 import os
 
 def walk(top, maxdepth=0, topdown=True, onerror=None, followlinks=False):
-    return _walk(os.fspath(top), topdown, onerror, followlinks, maxdepth)
+    return _walk(os.fspath(top), maxdepth, topdown, onerror, followlinks)
 
 def _walk(top, maxdepth, topdown, onerror, followlinks):
     dirs = []
@@ -61,8 +61,8 @@ def _walk(top, maxdepth, topdown, onerror, followlinks):
         for dirname in dirs:
             new_path = join(top, dirname)
             if followlinks or not islink(new_path):
-                yield from _walk(new_path, topdown, onerror, followlinks, maxdepth)
+                yield from _walk(new_path, maxdepth, topdown, onerror, followlinks)
     else:
         for new_path in walk_dirs:
-            yield from _walk(new_path, topdown, onerror, followlinks, maxdepth)
+            yield from _walk(new_path, maxdepth, topdown, onerror, followlinks)
         yield top, dirs, nondirs
