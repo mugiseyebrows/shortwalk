@@ -1,12 +1,27 @@
 import os
+import glob
+import fnmatch
 
-def walk(top, maxdepth=0, topdown=True, onerror=None, followlinks=False):
-    return _walk(os.fspath(top), maxdepth, topdown, onerror, followlinks)
+def walk(top, maxdepth=0, skip=None, topdown=True, onerror=None, followlinks=False):
+    return _walk(os.fspath(top), maxdepth, skip, topdown, onerror, followlinks)
 
-def _walk(top, maxdepth, topdown, onerror, followlinks):
+def make_skip_pred(skip):
+    def pred(name):
+        for pattern in skip:
+            if fnmatch.fnmatch(name, pattern):
+                return True
+            if name == pattern:
+                return True
+        return False
+    return pred
+
+def _walk(top, maxdepth, skip, topdown, onerror, followlinks):
     dirs = []
     nondirs = []
     walk_dirs = []
+    if skip is None:
+        skip = []
+    skip_pred = make_skip_pred(skip)
     try:
         scandir_it = os.scandir(top)
     except OSError as error:
@@ -32,9 +47,11 @@ def _walk(top, maxdepth, topdown, onerror, followlinks):
                 is_dir = False
 
             if is_dir:
-                dirs.append(entry.name)
+                if not skip_pred(entry.name):
+                    dirs.append(entry.name)
             else:
-                nondirs.append(entry.name)
+                if not skip_pred(entry.name):
+                    nondirs.append(entry.name)
 
             if not topdown and is_dir:
                 if followlinks:
@@ -46,13 +63,13 @@ def _walk(top, maxdepth, topdown, onerror, followlinks):
                         is_symlink = False
                     walk_into = not is_symlink
 
+                if skip_pred(entry.name):
+                    walk_into = False
+
                 if walk_into:
                     walk_dirs.append(entry.path)
 
     maxdepth -= 1
-    if maxdepth == 0:
-        walk_dirs = []
-
     if topdown:
         yield top, dirs, nondirs
         if maxdepth == 0:
@@ -61,8 +78,27 @@ def _walk(top, maxdepth, topdown, onerror, followlinks):
         for dirname in dirs:
             new_path = join(top, dirname)
             if followlinks or not islink(new_path):
-                yield from _walk(new_path, maxdepth, topdown, onerror, followlinks)
+                yield from _walk(new_path, maxdepth, skip, topdown, onerror, followlinks)
     else:
+        if maxdepth == 0:
+            walk_dirs = []
         for new_path in walk_dirs:
-            yield from _walk(new_path, maxdepth, topdown, onerror, followlinks)
+            yield from _walk(new_path, maxdepth, skip, topdown, onerror, followlinks)
         yield top, dirs, nondirs
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(prog='shortwalk')
+    parser.add_argument("--maxdepth", "-d", type=int, default=0)
+    parser.add_argument("--skip", "-s", nargs='*')
+    parser.add_argument("--topdown", "-t", type=int, default=1)
+    args = parser.parse_args()
+    #print(args); exit(0)
+    for root, dirs, files in walk(os.getcwd(), maxdepth = args.maxdepth, skip = args.skip, topdown=args.topdown):
+        for name in dirs:
+            print(os.path.join(root, name))
+        for name in files:
+            print(os.path.join(root, name))
+
+if __name__ == "__main__":
+    main()
